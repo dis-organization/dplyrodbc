@@ -42,7 +42,7 @@ cnames <- names(sqlQuery(con, sprintf("SELECT * FROM [%s] WHERE 0 = 1", tab)))
 cnames <- cnames[-grep("\\(I\\)", cnames)]
 ## some columns explode the app, presumably "Geom (I)" because of the size of the binary blob
 dat <- sqlQuery(con, sprintf("SELECT CoordSysToWKT(CCoordSys([Geom (I)])) AS [CoordSys], CGeomWKB([Geom (I)]) as [GeomWKB], %s FROM [%s]", 
-                           paste(dplyrodbc:::sql_squote(cnames), collapse = ", "), tab), stringsAsFactors = FALSE)
+                           paste(dplyrodbc:::sql_surroundquote(cnames, "[", "]"), collapse = ", "), tab), stringsAsFactors = FALSE)
 
 close(con)
 ```
@@ -53,14 +53,16 @@ The data.frame `x` has all the attributes, the Coordinate System (in OGC WKT for
 We don't want to look at the binary blob, so convert it to `sp` Spatial Geometry and discard. We can't deal with the WKT without awful kludges, so we skip it for now. 
 
 ```{r}
-
+library(rgdal)
 geom <- try(wkb::readWKB(dat$GeomWKB))
 if (!inherits(geom, "try-error")) {
   dat$GeomWKB <- NULL
   
   ## save full handling for another day (mixed CRS?)
   wkt <- unique(dat$CoordSys)
-  proj4 <- dplyrodbc:::prj_to_epsg(wkt[1])
+  #proj4 <- dplyrodbc:::prj_to_epsg(wkt[1])
+  ## after rgdal 1.1-4.zip
+  proj4 <- rgdal::showP4(wkt)
   dat$CoordSys <- NULL
   proj4string(geom) <-  proj4
   dwg <- sp::SpatialPolygonsDataFrame(geom, dat)
@@ -68,9 +70,9 @@ if (!inherits(geom, "try-error")) {
 }
 
 plot(dwg)
-text(coordinates(dwg), lab = dwg$FIPS)
+text(coordinates(dwg), lab = dwg$FIPS, cex = 0.6)
 
-
+library(raster)
 print(dwg)
 ```
 
@@ -95,13 +97,15 @@ library(dplyr)
 And Manifold. 
 
 ```{r}
+
+
 ## not clear how to do this yet
 ## we need cases for odbcConnectWhatever
 #' @export
 setMethod(
   "dbConnect", 
-  "ODBCDriver", 
-  function(drv, dsn, user = NULL, password = NULL, ..., manifold = FALSE){
+  "ODBCDriver",
+  function(drv, dsn, user = NULL, password = NULL, manifold = FALSE, ...){
     uid <- if(is.null(user)) "" else user
     pwd <- if(is.null(password)) "" else password
     if (manifold) {
@@ -113,47 +117,13 @@ setMethod(
   }
 )
 
-
-
-src_manifold <- function(dbname = NULL, host = NULL, port = NULL, user = NULL,
-                         password = NULL, ...) {
-  
-  con <-    dbConnect(RODBCDBI::ODBC(), dbname, manifold = TRUE)
-  
-  src_sql("manifold", con)
-}
-
-
-
-src_desc.src_manifold <- function(con) {
-  info <- dbGetInfo(con$con)
-  host <- if (info$host == "") "localhost" else info$host
-
-  paste0("manifold ", info$serverVersion, " [", info$user, "@",
-         host, ":", info$port, "/", info$dbname, "]")
-}
-
-
-db_list_tables.src_manifold <- function(con) {
-  dbListTables(con$con)
-}
-
-db_has_table.src_manifold <- function(con, table) {
-  dbExistsTable(con$con, table)
-}
-
-tbl.src_manifold <- function(src, from, ...) {
-  tbl_sql("manifold", src = src, from = from, ...)
-}
-
-src_translate_env.src_manifold <- dplyr:::src_translate_env.NULL
-
-
-
+## gah, got to get the namespace figured out
+fs <- list.files("R", pattern = ".r$", full.names = TRUE)
+for (i in fs) source(i)
 
 
 manifold <-src_manifold(mapfile)
-## woah, not cool
+## woah, not cool  (doesn't happen now?)
 # ct <- tbl(manifold, "Countries Table")
 #  Show Traceback
 #  
@@ -161,10 +131,24 @@ manifold <-src_manifold(mapfile)
 #  Error in odbcQuery(channel, query, rows_at_time) : 
 #   'Calloc' could not allocate memory (2147483648 of 1 bytes) 
 
-## Try with innocuous table
- ct <- tbl(manifold, "Countries Table")
 
- ## collect, summarize, etc. don't work yet
+ct <- tbl(manifold, "Countries Table")
+
+
+## group by number of Branches, make a count and summarize the Area
+ct %>% group_by(`Branches (I)`) %>% summarize(n = n(), totalarea = sum(`Area (I)`))
+ 
+
+## that doesn't make sense for a Longitude/Latitude drawing so reproject the Geom first
+#WKTToCoordSys(wkt)
+#Project(Geom, cs)
+
+## not sure how to escape WKT CRS
+#ct %>% mutate(target = wkt)
+
+
+#a <- collect(ct)
+ 
 # a <- collect(ct %>% group_by(`Branches (I)`) %>% select(`Longitude (I)`, `Latitude (I)` ))
 # Error in .valueClassTest(ans, "data.frame", "fetch") : 
 #   invalid value from generic function ‘fetch’, class “character”, expected “data.frame”

@@ -4,8 +4,8 @@
 #'
 #' @param prj 
 #'
-#' @return
-#' @export
+#' @return CRS
+#' @export 
 #' @author boB Rudis <bob at rudis.net>
 #' @examples
 #' \dontrun{

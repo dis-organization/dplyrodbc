@@ -9,6 +9,9 @@ prj_to_epsg(prj)
 \arguments{
 \item{prj}{}
 }
+\value{
+CRS
+}
 \description{
 Title
 }
