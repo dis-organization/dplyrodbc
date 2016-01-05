@@ -9,7 +9,7 @@ devtools::install_github("mdsumner/RODBCDBI",   ref = "mike")
 Example
 -------
 
-ODBC has an installed File DSN called "CountriesAccess". This is a .mdb file created using 32-bit Windows (effectively) and configured with the Data Sources application from "C:6432.exe".
+ODBC has an installed File DSN called "CountriesAccess". This is a .mdb file created using 32-bit Windows (effectively) and configured with the Data Sources application from "C:\\Windows\\SysWOW64\\odbcad32.exe".
 
 Minimal test for RODBC.
 
