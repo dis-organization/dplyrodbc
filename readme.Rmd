@@ -89,10 +89,68 @@ sql_escape_string.ODBCConnection <- function(con, x) {
 sql_escape_ident.ODBCConnection<- function(con, x) {
   sql_squote(x)
 }
+
+
+## crucial part, since our ODBC source uses TOP instead of LIMIT
+sql_select.ODBCConnection <- 
+function (con, select, from, where = NULL, group_by = NULL, having = NULL, 
+    order_by = NULL, limit = NULL, offset = NULL, ...) 
+{
+    out <- vector("list", 8)
+    names(out) <- c("select", "from", "where", "group_by", "having", 
+        "order_by", "limit", "offset")
+    assertthat::assert_that(is.character(select), length(select) > 0L)
+    
+   
+        if (!is.null(limit)) {
+          assertthat::assert_that(is.integer(limit), length(limit) == 1L)
+          ## TOP clause is part of SELECT
+           out$select <- build_sql("SELECT ", " TOP ", limit, " ",  escape(select, collapse = ", ", 
+        con = con))
+        } else {
+    
+      out$select <- build_sql("SELECT", escape(select, collapse = ", ", 
+        con = con))
+        }
+    
+    assertthat::assert_that(is.character(from), length(from) == 1L)
+    out$from <- build_sql("FROM ", from, con = con)
+    if (length(where) > 0L) {
+        assertthat::assert_that(is.character(where))
+        out$where <- build_sql("WHERE ", escape(where, collapse = " AND ", 
+            con = con))
+    }
+    if (!is.null(group_by)) {
+        assertthat::assert_that(is.character(group_by), length(group_by) > 
+            0L)
+        out$group_by <- build_sql("GROUP BY ", escape(group_by, 
+            collapse = ", ", con = con))
+    }
+    if (!is.null(having)) {
+        assertthat::assert_that(is.character(having), length(having) == 1L)
+        out$having <- build_sql("HAVING ", escape(having, collapse = ", ", 
+            con = con))
+    }
+    if (!is.null(order_by)) {
+        assertthat::assert_that(is.character(order_by), length(order_by) > 
+            0L)
+        out$order_by <- build_sql("ORDER BY ", escape(order_by, 
+            collapse = ", ", con = con))
+    }
+
+    if (!is.null(offset)) {
+        assertthat::assert_that(is.integer(offset), length(offset) == 1L)
+        out$offset <- build_sql("OFFSET ", offset, con = con)
+    }
+    escape(unname(dplyr:::compact(out)), collapse = "\n", parens = FALSE, 
+        con = con)
+}
+ 
+
 ```
 
 
-Try for real with our Access source. Here we see the engine generate a SQL query with all of the column names and table name escaped correctly, but with LIMIT 10. How to modify this to use TOP 10? 
+Try for real with our Access source. 
 
 ```{r}
 library(DBI)
@@ -100,17 +158,35 @@ library(RODBCDBI)
 library(dplyr)
 x <- src_access("CountriesAccess1")
 
-## a debug statement to print(res@sql) in the dbFetch/fetch methods shows the problem with LIMIT
-e <- try(tbl(x, 'Countries Table'))
+accesstable <- tbl(x, "Countries Table")
+## filter
+accesstable  %>% filter(ID == 1)
+
+## group_by
+accesstable %>% group_by(BranchesI)
+
+## mutate
+accesstable  %>% mutate(a = 1)
+
+## arrange, but prints too many rows?
+accesstable  %>% arrange(BranchesI) %>% filter(coordinatesI > 1434)
+
+## summarize doesn't work 
+# accesstable %>% group_by(BranchesI) %>% summarize(x = n())
+# Source: Access  [@ACCESS:/ACCESS]
+# From: <derived table> [?? x 2]
+# 
+# Error in .valueClassTest(ans, "data.frame", "fetch") : 
+#   invalid value from generic function ‘fetch’, class “character”, expected “data.frame”
+# In addition: Warning message:
+# closing unused RODBC handle 4 
+# 
+
 
 ```
 
-> From: Countries Table [3,063 x 14]
-> 
-> <SQL> SELECT [ID], [TypeI], [BranchesI], [CoordinatesI], [XI], [YI], [LongitudeI], [LatitudeI], [LengthI], [AreaI], 
-> [BearingI], [SelectionMaskI], [SelectionI], [VersionI]
-> FROM [Countries Table]
-> LIMIT 10
+
+
 
 
 
