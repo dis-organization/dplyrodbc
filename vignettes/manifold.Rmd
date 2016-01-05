@@ -26,6 +26,34 @@ library(raster)
 Here we illustrate connecting to a Manifold project via ODBC. 
 First with direct `RODBC` connection and conversion to `Spatial` types, then via `dplyr` wrapping for the SQL backend. 
 
+## Explanation for Manifold people
+
+R makes this all a lot easier from my perspective. I'm writing wrappers for the dplyr package so it can use Manifold as a "SQL backend". 
+
+
+
+In practical terms 
+
+
+
+```R
+library(dplyr)  ## extension code
+map <- connectManifold("C:/path/to/project.map")
+## connect table which drives Manifold SQL
+table <- tbl(map, "Drawing Table")
+
+## issue some dplyr-verbs that are converted to Manifold SQL and evaluated natively
+table %>% group_by(FactorColumn) %>% summarize(count = n(), avgTemp = mean(Temp))
+```
+
+There is no limit to the standard-SQL that can be carried out through this wrapping, and we can also issue actual Manifold-SQL commands so we have all the spatial goodness at our R fingertips.  It's the best of both worlds for R-users and Manifold lifers IMO. 
+
+I've made a lot of progress (and most of the credit belongs to the dplyr developers). I'm hoping it will provide a straightforward basis to finally bring to maturity this R/Manifold connection. 
+
+
+
+
+
 ## Minimal test for RODBC
 
 This code shows the tradtional way to read data from a Manifold project using `RODBC`. 
