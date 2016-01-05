@@ -1,0 +1,139 @@
+---
+title: "R tools for Manifold via ODBC and dplyr"
+author: "Michael D. Sumner"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{R tools for Manifold via ODBC and dplyr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, echo = FALSE,message=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "README-", 
+  fig.height = 9,
+  fig.width = 9
+)
+library(raster)
+```
+
+## dplyrodbc
+
+
+## Example
+
+
+Minimal test for RODBC. 
+
+```{r}
+library(RODBC)
+library(dplyrodbc)
+mapfile <- system.file("extdata", "Countries.map", package = "dplyrodbc")
+con <- odbcConnectManifold(mapfile)
+tab <- "Countries"
+cnames <- names(sqlQuery(con, sprintf("SELECT * FROM [%s] WHERE 0 = 1", tab)))
+## Drop all Intrinsic columns (we cast one to GeomWKB)
+cnames <- cnames[-grep("\\(I\\)", cnames)]
+## some columns explode the app, presumably "Geom (I)" because of the size of the binary blob
+dat <- sqlQuery(con, sprintf("SELECT CoordSysToWKT(CCoordSys([Geom (I)])) AS [CoordSys], CGeomWKB([Geom (I)]) as [GeomWKB], %s FROM [%s]", 
+                           paste(dplyrodbc:::sql_squote(cnames), collapse = ", "), tab), stringsAsFactors = FALSE)
+
+close(con)
+```
+
+
+The data.frame `x` has all the attributes, the Coordinate System (in OGC WKT format), and the Geometry as a binary blob (in OGC WKB format). 
+
+We don't want to look at the binary blob, so convert it to `sp` Spatial Geometry and discard. 
+
+```{r}
+
+geom <- try(wkb::readWKB(dat$GeomWKB))
+if (!inherits(geom, "try-error")) {
+  dat$GeomWKB <- NULL
+  
+  ## save this for another day
+  wkt <- unique(dat$CoordSys)
+  dat$CoordSys <- NULL
+  
+  dwg <- sp::SpatialPolygonsDataFrame(geom, dat)
+  rm(dat, geom)
+}
+
+plot(dwg)
+text(coordinates(dwg), lab = dwg$FIPS)
+
+```
+We need some fixes to RODBCDBI. 
+
+```{r,eval=FALSE}
+devtools::install_github("mdsumner/RODBCDBI",   ref = "mike")
+```
+
+
+Methods for us. 
+
+```{r}
+fs <- list.files("R", pattern = ".r$", full.names = TRUE)
+for (i in fs) source(i)
+
+```
+
+And Manifold. 
+
+```{r,eval=FALSE}
+## not clear how to do this yet
+## we need cases for odbcConnectWhatever
+setMethod(
+  "dbConnect", 
+  "ODBCDriver", 
+  function(drv, dsn, user = NULL, password = NULL, ..., manifold = FALSE){
+    uid <- if(is.null(user)) "" else user
+    pwd <- if(is.null(password)) "" else password
+    if (manifold) {
+     connection <- odbcConnectManifold(dsn) 
+    } else {
+      connection <- odbcConnect(dsn, uid, pwd, ...)
+    }
+    new("ODBCConnection", odbc=connection)
+  }
+)
+
+
+src_manifold <- function(dbname = NULL, host = NULL, port = NULL, user = NULL,
+                         password = NULL, ...) {
+
+  con <-    dbConnect(RODBCDBI::ODBC(), dbname, manifold = TRUE)
+
+  src_sql("manifold", con)
+}
+
+
+
+manifold <- src_manifold(mapfile)
+## woah, not cool
+# ct <- tbl(manifold, "Countries Table")
+#  Show Traceback
+#  
+#  Rerun with Debug
+#  Error in odbcQuery(channel, query, rows_at_time) : 
+#   'Calloc' could not allocate memory (2147483648 of 1 bytes) 
+
+## Try with innocuous table
+ ct <- tbl(manifold, "Table")
+
+ ## collect, summarize, etc. don't work yet
+# a <- collect(ct %>% group_by(`Branches (I)`) %>% select(`Longitude (I)`, `Latitude (I)` ))
+# Error in .valueClassTest(ans, "data.frame", "fetch") : 
+#   invalid value from generic function ‘fetch’, class “character”, expected “data.frame”
+# 
+
+```
+
+
+
+

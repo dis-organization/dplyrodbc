@@ -1,3 +1,9 @@
+#' Title
+#'
+#' @param mapfile 
+#'
+#' @export
+#'
 odbcConnectManifold <- function (mapfile)
 
 {
