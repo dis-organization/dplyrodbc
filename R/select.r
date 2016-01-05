@@ -1,4 +1,5 @@
 ## crucial part, since our ODBC source uses TOP instead of LIMIT
+#' @export
 sql_select.ODBCConnection <-
   function (con, select, from, where = NULL, group_by = NULL, having = NULL,
             order_by = NULL, limit = NULL, offset = NULL, ...)
@@ -16,7 +17,7 @@ sql_select.ODBCConnection <-
                                                                       con = con))
     } else {
 
-      out$select <- build_sql("SELECT", escape(select, collapse = ", ",
+      out$select <- build_sql("SELECT ", escape(select, collapse = ", ",
                                                con = con))
     }
 
