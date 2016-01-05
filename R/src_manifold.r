@@ -41,28 +41,3 @@ odbcConnectManifold <- function (mapfile)
 }
 
 
-
-src_desc.src_manifold <- function(con) {
-  info <- dbGetInfo(con$con)
-  host <- if (info$host == "") "localhost" else info$host
-
-  paste0("manifold ", info$serverVersion, " [", info$user, "@",
-         host, ":", info$port, "/", info$dbname, "]")
-}
-
-
-db_list_tables.src_manifold <- function(con) {
-  dbListTables(con$con)
-}
-
-db_has_table.src_manifold <- function(con, table) {
-  dbExistsTable(con$con, table)
-}
-
-tbl.src_manifold <- function(src, from, ...) {
-  tbl_sql("manifold", src = src, from = from, ...)
-}
-
-src_translate_env.src_manifold <- dplyr:::src_translate_env.NULL
-
-

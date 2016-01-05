@@ -2,4 +2,3 @@
 
 export(odbcConnectManifold)
 export(prj_to_epsg)
-exportMethods(dbConnect)

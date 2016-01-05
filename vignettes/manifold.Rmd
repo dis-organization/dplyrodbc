@@ -23,11 +23,13 @@ library(raster)
 
 ## dplyrodbc
 
+Here we illustrate connecting to a Manifold project via ODBC. 
+First with direct `RODBC` connection and conversion to `Spatial` types, then via `dplyr` wrapping for the SQL backend. 
 
-## Example
+## Minimal test for RODBC
 
+This code shows the tradtional way to read data from a Manifold project using `RODBC`. 
 
-Minimal test for RODBC. 
 
 ```{r}
 library(RODBC)
@@ -48,7 +50,7 @@ close(con)
 
 The data.frame `x` has all the attributes, the Coordinate System (in OGC WKT format), and the Geometry as a binary blob (in OGC WKB format). 
 
-We don't want to look at the binary blob, so convert it to `sp` Spatial Geometry and discard. 
+We don't want to look at the binary blob, so convert it to `sp` Spatial Geometry and discard. We can't deal with the WKT without awful kludges, so we skip it for now. 
 
 ```{r}
 
@@ -56,38 +58,46 @@ geom <- try(wkb::readWKB(dat$GeomWKB))
 if (!inherits(geom, "try-error")) {
   dat$GeomWKB <- NULL
   
-  ## save this for another day
+  ## save full handling for another day (mixed CRS?)
   wkt <- unique(dat$CoordSys)
+  proj4 <- dplyrodbc:::prj_to_epsg(wkt[1])
   dat$CoordSys <- NULL
-  
+  proj4string(geom) <-  proj4
   dwg <- sp::SpatialPolygonsDataFrame(geom, dat)
-  rm(dat, geom)
+  rm(dat, geom, proj4)
 }
 
 plot(dwg)
 text(coordinates(dwg), lab = dwg$FIPS)
 
+
+print(dwg)
 ```
+
+
+## Connecting to the ODBC SQL engine via dplyr
+
 We need some fixes to RODBCDBI. 
 
-```{r,eval=FALSE}
-devtools::install_github("mdsumner/RODBCDBI",   ref = "mike")
+```{r}
+##devtools::install_github("mdsumner/RODBCDBI",   ref = "mike")
+library(RODBCDBI)
 ```
 
 
-Methods for us. 
+Methods for our specific  classes extending `DBI` for ODBC. 
 
 ```{r}
-fs <- list.files("R", pattern = ".r$", full.names = TRUE)
-for (i in fs) source(i)
-
+library(dplyrodbc)  ## move this to manifoldr when it's working
+library(dplyr)
 ```
 
 And Manifold. 
 
-```{r,eval=FALSE}
+```{r}
 ## not clear how to do this yet
 ## we need cases for odbcConnectWhatever
+#' @export
 setMethod(
   "dbConnect", 
   "ODBCDriver", 
@@ -95,7 +105,7 @@ setMethod(
     uid <- if(is.null(user)) "" else user
     pwd <- if(is.null(password)) "" else password
     if (manifold) {
-     connection <- odbcConnectManifold(dsn) 
+      connection <- odbcConnectManifold(dsn) 
     } else {
       connection <- odbcConnect(dsn, uid, pwd, ...)
     }
@@ -104,17 +114,45 @@ setMethod(
 )
 
 
+
 src_manifold <- function(dbname = NULL, host = NULL, port = NULL, user = NULL,
                          password = NULL, ...) {
-
+  
   con <-    dbConnect(RODBCDBI::ODBC(), dbname, manifold = TRUE)
-
+  
   src_sql("manifold", con)
 }
 
 
 
-manifold <- src_manifold(mapfile)
+src_desc.src_manifold <- function(con) {
+  info <- dbGetInfo(con$con)
+  host <- if (info$host == "") "localhost" else info$host
+
+  paste0("manifold ", info$serverVersion, " [", info$user, "@",
+         host, ":", info$port, "/", info$dbname, "]")
+}
+
+
+db_list_tables.src_manifold <- function(con) {
+  dbListTables(con$con)
+}
+
+db_has_table.src_manifold <- function(con, table) {
+  dbExistsTable(con$con, table)
+}
+
+tbl.src_manifold <- function(src, from, ...) {
+  tbl_sql("manifold", src = src, from = from, ...)
+}
+
+src_translate_env.src_manifold <- dplyr:::src_translate_env.NULL
+
+
+
+
+
+manifold <-src_manifold(mapfile)
 ## woah, not cool
 # ct <- tbl(manifold, "Countries Table")
 #  Show Traceback
@@ -124,7 +162,7 @@ manifold <- src_manifold(mapfile)
 #   'Calloc' could not allocate memory (2147483648 of 1 bytes) 
 
 ## Try with innocuous table
- ct <- tbl(manifold, "Table")
+ ct <- tbl(manifold, "Countries Table")
 
  ## collect, summarize, etc. don't work yet
 # a <- collect(ct %>% group_by(`Branches (I)`) %>% select(`Longitude (I)`, `Latitude (I)` ))
